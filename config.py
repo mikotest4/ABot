@@ -24,6 +24,10 @@ class Config(object):
     
     # wes response configuration     
     WEBHOOK = bool(os.environ.get("WEBHOOK", "True"))
+    
+    # Queue system configuration
+    MAX_CONCURRENT_FILES = int(os.environ.get("MAX_CONCURRENT_FILES", "3"))
+    QUEUE_TIMEOUT = int(os.environ.get("QUEUE_TIMEOUT", "3600"))  # 1 hour timeout
 
 
 class Txt(object):
@@ -147,6 +151,8 @@ Pʀɪᴄɪɴɢ:
 
 ➲ /Autorename: ᴀᴜᴛᴏ ʀᴇɴᴀᴍᴇ ʏᴏᴜʀ ꜰɪʟᴇꜱ.
 ➲ /Metadata: ᴄᴏᴍᴍᴀɴᴅꜱ ᴛᴏ ᴛᴜʀɴ ᴏɴ ᴏғғ ᴍᴇᴛᴀᴅᴀᴛᴀ.
+➲ /Queue: ᴄʜᴇᴄᴋ ʏᴏᴜʀ ғɪʟᴇ ᴘʀᴏᴄᴇssɪɴɢ qᴜᴇᴜᴇ.
+➲ /Clearqueue: ᴄʟᴇᴀʀ ᴘᴇɴᴅɪɴɢ ғɪʟᴇs ғʀᴏᴍ qᴜᴇᴜᴇ.
 ➲ /Help: ɢᴇᴛ ǫᴜɪᴄᴋ ᴀꜱꜱɪꜱᴛᴀɴᴄᴇ.</b>"""
 
     SEND_METADATA = """
@@ -166,38 +172,46 @@ Pʀɪᴄɪɴɢ:
 [ᴩʏᴛʜᴏɴ-ᴛᴇʟᴇɢʀᴀᴍ-ʙᴏᴛ](https://github.com/python-telegram-bot/python-telegram-bot)
 ᴀɴᴅ ᴜsɪɴɢ [ᴍᴏɴɢᴏ](https://cloud.mongodb.com) ᴀs ᴅᴀᴛᴀʙᴀsᴇ.
 
+<b>sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ :</b> [ᴄʟɪᴄᴋ ʜᴇʀᴇ](https://github.com/Codeflix-Bots/AutoRenameBot)
 
-<b>ʜᴇʀᴇ ɪs ᴍʏ sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ :</b> [ɢɪᴛʜᴜʙ](https://github.com/codeflix_bots/autorenamebot)
+<b>ғᴇᴀᴛᴜʀᴇ ʀᴇǫᴜᴇsᴛ & ɪssᴜᴇs :</b> [ᴄʟɪᴄᴋ ʜᴇʀᴇ](https://github.com/Codeflix-Bots/AutoRenameBot/issues)
 
-
-ᴀᴜᴛᴏ ʀᴇɴᴀᴍᴇ ʙᴏᴛ ɪs ʟɪᴄᴇɴsᴇᴅ ᴜɴᴅᴇʀ ᴛʜᴇ [ᴍɪᴛ ʟɪᴄᴇɴsᴇ](https://github.com/codeflix_bots/autorenamebot/blob/main/LICENSE).
-© 2024 | [sᴜᴘᴘᴏʀᴛ ᴄʜᴀᴛ](https://t.me/codeflixsupport), ᴀʟʟ ʀɪɢʜᴛs ʀᴇꜱᴇʀᴠᴇᴅ."""
-
-    META_TXT = """
-**ᴍᴀɴᴀɢɪɴɢ ᴍᴇᴛᴀᴅᴀᴛᴀ ғᴏʀ ʏᴏᴜʀ ᴠɪᴅᴇᴏs ᴀɴᴅ ғɪʟᴇs**
-
-**ᴠᴀʀɪᴏᴜꜱ ᴍᴇᴛᴀᴅᴀᴛᴀ:**
-
-- **ᴛɪᴛʟᴇ**: Descriptive title of the media.
-- **ᴀᴜᴛʜᴏʀ**: The creator or owner of the media.
-- **ᴀʀᴛɪꜱᴛ**: The artist associated with the media.
-- **ᴀᴜᴅɪᴏ**: Title or description of audio content.
-- **ꜱᴜʙᴛɪᴛʟᴇ**: Title of subtitle content.
-- **ᴠɪᴅᴇᴏ**: Title or description of video content.
-
-**ᴄᴏᴍᴍᴀɴᴅꜱ ᴛᴏ ᴛᴜʀɴ ᴏɴ ᴏғғ ᴍᴇᴛᴀᴅᴀᴛᴀ:**
-➜ /metadata: Turn on or off metadata.
-
-**ᴄᴏᴍᴍᴀɴᴅꜱ ᴛᴏ ꜱᴇᴛ ᴍᴇᴛᴀᴅᴀᴛᴀ:**
-
-➜ /settitle: Set a custom title of media.
-➜ /setauthor: Set the author.
-➜ /setartist: Set the artist.
-➜ /setaudio: Set audio title.
-➜ /setsubtitle: Set subtitle title.
-➜ /setvideo: Set video title.
-
-**ᴇxᴀᴍᴘʟᴇ:** /settitle Your Title Here
-
-**ᴜꜱᴇ ᴛʜᴇꜱᴇ ᴄᴏᴍᴍᴀɴᴅꜱ ᴛᴏ ᴇɴʀɪᴄʜ ʏᴏᴜʀ ᴍᴇᴅɪᴀ ᴡɪᴛʜ ᴀᴅᴅɪᴛɪᴏɴᴀʟ ᴍᴇᴛᴀᴅᴀᴛᴀ ɪɴꜰᴏʀᴍᴀᴛɪᴏɴ!**
+<b>ɪғ ʏᴏᴜ ғᴀᴄᴇ ᴀɴʏ ᴘʀᴏʙʟᴇᴍ ᴛʜᴇɴ sᴇɴᴅ ss ᴛᴏ ᴍʏ ᴏᴡɴᴇʀ :- @ProYato</b>
 """
+    
+    META_TXT = """
+<b>--Metadata Settings:--</b>
+
+➜ /settitle - To set custom video title metadata.
+➜ /setauthor - To set custom author metadata.
+➜ /setartist - To set custom artist metadata.
+➜ /setaudio - To set custom audio title metadata.
+➜ /setsubtitle - To set custom subtitle metadata.
+➜ /setvideo - To set custom video title metadata.
+
+<b>Example:</b>
+/settitle My Custom Title
+/setauthor @MyChannel
+/setartist @MyChannel
+
+<b>Note:</b> Metadata will be added to your renamed files when metadata is enabled in /metadata settings.
+"""
+
+    QUEUE_TXT = """<b><u>» Queue System Information</u></b>
+
+<b>Queue Commands:</b>
+➲ /queue - Check your current queue status
+➲ /clearqueue - Clear all pending files from queue
+
+<b>How it works:</b>
+• Bot can process up to 3 files simultaneously
+• Additional files are automatically queued
+• Files are processed in order received
+• You get status updates for each file
+
+<b>Queue Status:</b>
+🔄 **Processing Slots**: Shows active file processing
+⏳ **Queue Position**: Your position in waiting line
+⚡ **Capacity**: Total concurrent processing limit
+
+<b>Note:</b> Queue system works automatically - just send your files and the bot will handle the rest efficiently!"""
