@@ -174,37 +174,37 @@ async def process_single_file(client: Client, file_task: FileTask, task_id: str)
         media_preference = await codeflixbots.get_media_preference(user_id)
         status_msg = await send_queue_status(message, user_id)
         try:
-            if media_preference == "video" and (message.video or message.document):
-                await client.send_video(
-                    chat_id=message.chat.id,
-                    video=file_path,
-                    caption=caption,
-                    thumb=thumb_path,
-                    progress=progress_for_pyrogram,
-                    progress_args=("Uploading...", msg, time.time())
-                )
-            elif media_preference == "audio" and (message.audio or message.document):
-                await client.send_audio(
-                    chat_id=message.chat.id,
-                    audio=file_path,
-                    caption=caption,
-                    thumb=thumb_path,
-                    progress=progress_for_pyrogram,
-                    progress_args=("Uploading...", msg, time.time())
-                )
-            else:
-                await client.send_document(
-                    chat_id=message.chat.id,
-                    document=file_path,
-                    caption=caption,
-                    thumb=thumb_path,
-                    progress=progress_for_pyrogram,
-                    progress_args=("Uploading...", msg, time.time())
-                )
-            await msg.edit("✅ **File renamed and uploaded successfully!**")
-        except Exception as e:
-            await msg.edit(f"❌ Upload failed: {e}")
-            raise
+    if media_preference == "video" and (message.video or message.document):
+        await client.send_video(
+            chat_id=message.chat.id,
+            video=file_path,
+            caption=caption,
+            thumb=thumb_path,
+            progress=progress_for_pyrogram,
+            progress_args=("Uploading...", msg, time.time())
+        )
+    elif media_preference == "audio" and (message.audio or message.document):
+        await client.send_audio(
+            chat_id=message.chat.id,
+            audio=file_path,
+            caption=caption,
+            thumb=thumb_path,
+            progress=progress_for_pyrogram,
+            progress_args=("Uploading...", msg, time.time())
+        )
+    else:
+        await client.send_document(
+            chat_id=message.chat.id,
+            document=file_path,
+            caption=caption,
+            thumb=thumb_path,
+            progress=progress_for_pyrogram,
+            progress_args=("Uploading...", msg, time.time())
+        )
+    await msg.delete()  # This replaces the success message with deletion
+except Exception as e:
+    await msg.edit(f"❌ Upload failed: {e}")
+    raise
     except Exception as e:
         logger.error(f"Processing error: {e}")
         await message.reply_text(f"❌ Error: {str(e)}")
