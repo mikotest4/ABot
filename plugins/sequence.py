@@ -108,7 +108,7 @@ async def end_sequence(client, message):
     await progress.edit_text(f"✅ Successfully sent {sent_count} files in sequence!")
 
 # File handler with higher group priority to ensure it runs before rename handler
-@Client.on_message(filters.private & (filters.document | filters.video | filters.audio), group=0)
+@Client.on_message(filters.private & (filters.document | filters.video | filters.audio), group=-1)
 async def sequence_file_handler(client, message):
     user_id = message.from_user.id
     
@@ -163,37 +163,52 @@ async def show_sequence(client, message):
     sequence_data = sequence_collection.find_one({"user_id": user_id})
     
     if not sequence_data or not sequence_data.get("files"):
-        await message.reply_text("No files in current sequence.")
+        await message.reply_text("📋 **No files in sequence**")
         return
     
     files = sequence_data.get("files", [])
-    sorted_files = sorted(files, key=lambda x: extract_episode_number(x["filename"]))
+    files_list = []
     
-    file_list = "\n".join([
-        f"{i}. {file['filename']}" 
-        for i, file in enumerate(sorted_files, 1)
-    ])
+    for i, file in enumerate(files, 1):
+        episode_num = extract_episode_number(file["filename"])
+        if episode_num != float('inf'):
+            files_list.append(f"{i}. {file['filename']} (Episode {episode_num})")
+        else:
+            files_list.append(f"{i}. {file['filename']} (No episode detected)")
     
-    if len(file_list) > 4000:
-        file_list = file_list[:3900] + "\n\n... (list truncated)"
+    # Limit display to first 10 files
+    display_files = files_list[:10]
+    if len(files_list) > 10:
+        display_files.append(f"... and {len(files_list) - 10} more files")
+    
+    files_text = "\n".join(display_files)
     
     await message.reply_text(
-        f"**Current Sequence Files ({len(files)}):**\n\n{file_list}"
+        f"📋 **Files in Sequence ({len(files)} total):**\n\n{files_text}\n\n"
+        f"Use /endsequence to process all files in episode order."
     )
 
-@Client.on_message(filters.command("leaderboard"))
-async def leaderboard(client, message):
-    top_users = list(users_collection.find().sort("files_sequenced", -1).limit(5))
+@Client.on_message(filters.private & filters.command("leaderboard"))
+async def show_leaderboard(client, message):
+    # Get top 10 users by files sequenced
+    top_users = users_collection.find().sort("files_sequenced", -1).limit(10)
     
-    if not top_users:
-        await message.reply_text("No data available in the leaderboard yet!")
-        return
+    leaderboard_text = "🏆 **Top Users - Files Sequenced**\n\n"
+    
+    for i, user in enumerate(top_users, 1):
+        username = user.get("username", "Unknown")
+        files_count = user.get("files_sequenced", 0)
         
-    leaderboard_text = "**🏆 Top Users - File Sequencing 🏆**\n\n"
-
-    for index, user in enumerate(top_users, start=1):
-        username = user.get('username', 'Unknown User')
-        files_count = user.get('files_sequenced', 0)
-        leaderboard_text += f"**{index}. {username}** - {files_count} files\n"
-
+        if i == 1:
+            leaderboard_text += f"🥇 {username}: {files_count} files\n"
+        elif i == 2:
+            leaderboard_text += f"🥈 {username}: {files_count} files\n"
+        elif i == 3:
+            leaderboard_text += f"🥉 {username}: {files_count} files\n"
+        else:
+            leaderboard_text += f"{i}. {username}: {files_count} files\n"
+    
+    if not leaderboard_text.strip().endswith("files"):
+        leaderboard_text += "No users found in leaderboard yet!"
+    
     await message.reply_text(leaderboard_text)
