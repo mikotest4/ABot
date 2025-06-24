@@ -11,6 +11,7 @@ from pyrogram.errors import FloodWait
 from pyrogram.types import InputMediaDocument, Message
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
+from pymongo import MongoClient
 from plugins.antinsfw import check_anti_nsfw
 from helper.utils import progress_for_pyrogram, humanbytes, convert
 from helper.database import codeflixbots
@@ -25,6 +26,15 @@ logger = logging.getLogger(__name__)
 
 # Global dictionary to track ongoing operations
 renaming_operations = {}
+
+# Database setup for sequence mode
+db_client = MongoClient(Config.DB_URL)
+db = db_client[Config.DB_NAME]
+sequence_collection = db["active_sequences"]
+
+def is_in_sequence_mode(user_id):
+    """Check if user is in sequence mode"""
+    return sequence_collection.find_one({"user_id": user_id}) is not None
 
 # Enhanced regex patterns for season and episode extraction
 SEASON_EPISODE_PATTERNS = [
@@ -168,10 +178,15 @@ async def add_metadata(input_path, output_path, user_id):
     if process.returncode != 0:
         raise RuntimeError(f"FFmpeg error: {stderr.decode()}")
 
-@Client.on_message(filters.private & (filters.document | filters.video | filters.audio))
+@Client.on_message(filters.private & (filters.document | filters.video | filters.audio), group=1)
 async def auto_rename_files(client, message):
     """Main handler for auto-renaming files"""
     user_id = message.from_user.id
+    
+    # Check if user is in sequence mode - if so, let sequence handler take over
+    if is_in_sequence_mode(user_id):
+        return  # Let the sequence handler (group=0) handle this
+    
     format_template = await codeflixbots.get_format_template(user_id)
     
     if not format_template:
