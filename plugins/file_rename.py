@@ -11,11 +11,11 @@ from pyrogram.errors import FloodWait
 from pyrogram.types import InputMediaDocument, Message
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
-from pymongo import MongoClient
 from plugins.antinsfw import check_anti_nsfw
 from helper.utils import progress_for_pyrogram, humanbytes, convert
 from helper.database import codeflixbots
 from config import Config
+from pymongo import MongoClient
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # Global dictionary to track ongoing operations
 renaming_operations = {}
 
-# Database setup for sequence mode
+# Database connection for checking sequence mode
 db_client = MongoClient(Config.DB_URL)
 db = db_client[Config.DB_NAME]
 sequence_collection = db["active_sequences"]
@@ -226,154 +226,159 @@ async def auto_rename_files(client, message):
         season, episode = extract_season_episode(file_name)
         quality = extract_quality(file_name)
         
-        logger.info(f"Extracted - Season: {season}, Episode: {episode}, Quality: {quality}")
+        # Generate new filename using template
+        new_filename = format_template
         
-        # Replace placeholders in template
-        new_template = format_template
-        replacements = {
-            '{season}': season if season else 'XX',
-            '{episode}': episode if episode else 'XX',
-            '{quality}': quality if quality else 'HD',
-            'Season': season if season else 'XX',
-            'Episode': episode if episode else 'XX',
-            'QUALITY': quality if quality else 'HD'
-        }
+        # Replace variables in template
+        if season:
+            new_filename = new_filename.replace('{season}', season.zfill(2))
+            new_filename = new_filename.replace('season', season.zfill(2))
         
-        for placeholder, value in replacements.items():
-            new_template = new_template.replace(placeholder, str(value))
-
-        # Prepare file paths
-        ext = os.path.splitext(file_name)[1] or ('.mp4' if media_type == 'video' else '.mp3')
-        new_filename = f"{new_template}{ext}"
+        if episode:
+            new_filename = new_filename.replace('{episode}', episode.zfill(2))
+            new_filename = new_filename.replace('episode', episode.zfill(2))
         
-        # Ensure directories exist
-        downloads_dir = "downloads"
-        metadata_dir = "metadata"
-        os.makedirs(downloads_dir, exist_ok=True)
-        os.makedirs(metadata_dir, exist_ok=True)
+        if quality:
+            new_filename = new_filename.replace('{quality}', quality)
+            new_filename = new_filename.replace('quality', quality)
         
-        download_path = os.path.join(downloads_dir, new_filename)
-        metadata_path = os.path.join(metadata_dir, new_filename)
-
-        logger.info(f"Download path: {download_path}")
-        logger.info(f"Metadata path: {metadata_path}")
-
+        # Get file extension
+        file_extension = os.path.splitext(file_name)[1]
+        if not new_filename.endswith(file_extension):
+            new_filename += file_extension
+        
+        # NSFW check for new filename
+        if await check_anti_nsfw(new_filename, message):
+            return
+        
+        # Send processing message
+        processing_msg = await message.reply_text("🔄 Processing your file...")
+        
         # Download file
-        msg = await message.reply_text("**Downloading...**")
-        try:
-            file_path = await client.download_media(
-                message,
-                file_name=download_path,
-                progress=progress_for_pyrogram,
-                progress_args=("Downloading...", msg, time.time())
-            )
-            logger.info(f"Downloaded to: {file_path}")
-        except Exception as e:
-            logger.error(f"Download failed: {e}")
-            await msg.edit(f"Download failed: {e}")
-            raise
-
-        # Check if metadata is enabled
+        download_path = f"downloads/{file_id}{file_extension}"
+        os.makedirs(os.path.dirname(download_path), exist_ok=True)
+        
+        start_time = time.time()
+        await client.download_media(
+            file_id,
+            file_name=download_path,
+            progress=progress_for_pyrogram,
+            progress_args=("Downloading...", processing_msg, start_time)
+        )
+        
+        # Process metadata if enabled
         metadata_enabled = await codeflixbots.get_metadata(user_id)
+        final_path = download_path
+        
         if metadata_enabled == "On":
-            await msg.edit("**Processing metadata...**")
             try:
-                await add_metadata(file_path, metadata_path, user_id)
-                file_path = metadata_path
-                logger.info(f"Metadata added, using: {file_path}")
+                metadata_path = f"metadata/{file_id}{file_extension}"
+                os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+                await add_metadata(download_path, metadata_path, user_id)
+                final_path = metadata_path
             except Exception as e:
                 logger.error(f"Metadata processing failed: {e}")
-                await msg.edit(f"Metadata processing failed: {e}")
-
+                await processing_msg.edit_text("⚠️ Metadata processing failed, uploading without metadata")
+        
         # Get thumbnail
         thumb_path = None
-        thumbnail = await codeflixbots.get_thumbnail(user_id)
-        if thumbnail:
+        thumbnail_id = await codeflixbots.get_thumbnail(user_id)
+        if thumbnail_id:
             try:
-                thumb_path = await client.download_media(thumbnail)
+                thumb_path = f"thumbnails/{user_id}.jpg"
+                os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
+                await client.download_media(thumbnail_id, file_name=thumb_path)
                 thumb_path = await process_thumbnail(thumb_path)
             except Exception as e:
                 logger.error(f"Thumbnail processing failed: {e}")
-
-        # Get caption
-        caption = await codeflixbots.get_caption(user_id)
-        if caption:
-            try:
-                # Get file info for caption formatting
-                file_info = os.stat(file_path)
-                file_size_bytes = file_info.st_size
-                
-                # Try to get duration if it's a video/audio file
-                duration = "Unknown"
-                try:
-                    parser = createParser(file_path)
-                    if parser:
-                        metadata_info = extractMetadata(parser)
-                        if metadata_info and metadata_info.has("duration"):
-                            duration = str(metadata_info.get("duration"))
-                except:
-                    pass
-                
-                # Format caption
-                caption = caption.format(
-                    filename=new_filename,
-                    filesize=humanbytes(file_size_bytes),
-                    duration=duration
-                )
-            except Exception as e:
-                logger.error(f"Caption formatting failed: {e}")
+                thumb_path = None
+        
+        # Get custom caption
+        custom_caption = await codeflixbots.get_caption(user_id)
+        if custom_caption:
+            # Extract duration for videos
+            duration = 0
+            if media_type == "video" and message.video:
+                duration = message.video.duration
+            elif media_type == "audio" and message.audio:
+                duration = message.audio.duration
+            
+            caption = custom_caption.format(
+                filename=new_filename,
+                filesize=humanbytes(file_size),
+                duration=convert(duration) if duration else "N/A"
+            )
         else:
-            caption = f"**{new_filename}**"
-
+            caption = f"**File:** `{new_filename}`\n**Size:** `{humanbytes(file_size)}`"
+        
         # Get media preference
         media_preference = await codeflixbots.get_media_preference(user_id)
         
         # Upload file
-        await msg.edit("**Uploading...**")
-        try:
-            if media_preference == "video" and media_type in ["video", "document"]:
-                await client.send_video(
-                    chat_id=message.chat.id,
-                    video=file_path,
-                    caption=caption,
-                    thumb=thumb_path,
-                    progress=progress_for_pyrogram,
-                    progress_args=("Uploading...", msg, time.time())
-                )
-            elif media_preference == "audio" and media_type in ["audio", "document"]:
-                await client.send_audio(
-                    chat_id=message.chat.id,
-                    audio=file_path,
-                    caption=caption,
-                    thumb=thumb_path,
-                    progress=progress_for_pyrogram,
-                    progress_args=("Uploading...", msg, time.time())
-                )
-            else:
-                await client.send_document(
-                    chat_id=message.chat.id,
-                    document=file_path,
-                    caption=caption,
-                    thumb=thumb_path,
-                    progress=progress_for_pyrogram,
-                    progress_args=("Uploading...", msg, time.time())
-                )
-            
-            await msg.edit("**✅ File renamed and uploaded successfully!**")
-            
-        except Exception as e:
-            logger.error(f"Upload failed: {e}")
-            await msg.edit(f"Upload failed: {e}")
-            raise
-
+        await processing_msg.edit_text("⬆️ Uploading renamed file...")
+        start_time = time.time()
+        
+        if media_preference == "document" or media_type == "document":
+            await client.send_document(
+                chat_id=message.chat.id,
+                document=final_path,
+                thumb=thumb_path,
+                caption=caption,
+                progress=progress_for_pyrogram,
+                progress_args=("Uploading...", processing_msg, start_time)
+            )
+        elif media_preference == "video" or media_type == "video":
+            await client.send_video(
+                chat_id=message.chat.id,
+                video=final_path,
+                thumb=thumb_path,
+                caption=caption,
+                progress=progress_for_pyrogram,
+                progress_args=("Uploading...", processing_msg, start_time)
+            )
+        elif media_preference == "audio" or media_type == "audio":
+            await client.send_audio(
+                chat_id=message.chat.id,
+                audio=final_path,
+                thumb=thumb_path,
+                caption=caption,
+                progress=progress_for_pyrogram,
+                progress_args=("Uploading...", processing_msg, start_time)
+            )
+        else:
+            # Default to document
+            await client.send_document(
+                chat_id=message.chat.id,
+                document=final_path,
+                thumb=thumb_path,
+                caption=caption,
+                progress=progress_for_pyrogram,
+                progress_args=("Uploading...", processing_msg, start_time)
+            )
+        
+        # Delete processing message
+        await processing_msg.delete()
+        
+        # Clean up files
+        await cleanup_files(download_path, final_path, thumb_path)
+        
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        await message.reply_text(f"Rate limited. Please wait {e.value} seconds.")
     except Exception as e:
         logger.error(f"Error in auto_rename_files: {e}")
-        await message.reply_text(f"An error occurred: {str(e)}")
+        await message.reply_text(f"❌ An error occurred: {str(e)}")
+        
+        # Clean up files on error
+        try:
+            await cleanup_files(
+                f"downloads/{file_id}{file_extension}",
+                f"metadata/{file_id}{file_extension}",
+                f"thumbnails/{user_id}.jpg"
+            )
+        except:
+            pass
     
     finally:
-        # Cleanup
-        if file_id in renaming_operations:
-            del renaming_operations[file_id]
-        
-        # Clean up temporary files
-        await cleanup_files(download_path, metadata_path, thumb_path)
+        # Remove from operations tracker
+        renaming_operations.pop(file_id, None)
