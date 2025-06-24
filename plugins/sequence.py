@@ -11,7 +11,7 @@ from config import Config
 db_client = MongoClient(Config.DB_URL)
 db = db_client[Config.DB_NAME]
 users_collection = db["users_sequence"]
-sequence_collection = db["active_sequences"]  # Simplified collection name
+sequence_collection = db["active_sequences"]
 
 # Patterns for extracting episode numbers
 patterns = [
