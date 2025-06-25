@@ -7,7 +7,7 @@ class Config(object):
     # pyro client config
     API_ID    = os.environ.get("API_ID", "27704224")
     API_HASH  = os.environ.get("API_HASH", "c2e33826d757fe113bc154fcfabc987d")
-    BOT_TOKEN = os.environ.get("BOT_TOKEN", "7540338860:AAFSgM-h827cvQg0E8XQ-I--W-kjPqfKgyg") 
+    BOT_TOKEN = os.environ.get("BOT_TOKEN", "7792546137:AAElMEpZHsxJr4j5fBCOeR0-OGnSxFfOUpM") 
 
     # database config
     DB_NAME = os.environ.get("DB_NAME","Yato")     
@@ -16,8 +16,8 @@ class Config(object):
  
     # other configs
     BOT_UPTIME  = time.time()
-    START_PIC   = os.environ.get("START_PIC", "https://graph.org/file/51332f55a49e56fc28ee2-6ff539b07e6be4f749.jpg")
-    ADMIN       = [int(admin) if id_pattern.search(admin) else admin for admin in os.environ.get('ADMIN', '7970350353').split()]
+    START_PIC   = os.environ.get("START_PIC", "https://telegra.ph/file/7b919db66124920709adf-862cf80172ae8a6eed.jpg")
+    ADMIN       = [int(admin) if id_pattern.search(admin) else admin for admin in os.environ.get('ADMIN', '6540378387').split()]
     FORCE_SUB_CHANNELS = os.environ.get('FORCE_SUB_CHANNELS', 'dhghythgf').split(',')
     LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "-1002669902570"))
     DUMP_CHANNEL = int(os.environ.get("DUMP_CHANNEL", "-1002669902570"))
