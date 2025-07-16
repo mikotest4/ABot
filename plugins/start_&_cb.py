@@ -62,6 +62,51 @@ async def start(client, message: Message):
             disable_web_page_preview=True
         )
 
+# Settings callback helper function
+async def settings_callback(client, callback_query: CallbackQuery):
+    """Handle settings callback from main menu"""
+    user_id = callback_query.from_user.id
+    
+    try:
+        # Get current user settings
+        upload_as_document = await codeflixbots.get_upload_mode(user_id)
+        destination_info = await codeflixbots.get_upload_destination(user_id)
+        
+        # Format upload mode text
+        upload_mode_text = "Send As Document ✅" if upload_as_document else "Send As Media ✅"
+        
+        # Format destination text
+        if destination_info and destination_info.get('chat_id'):
+            dest_name = destination_info.get('name', 'Unknown Channel/Group')
+            destination_text = f"📍 Destination: {dest_name}"
+        else:
+            destination_text = "📍 Destination: Private Chat (Default)"
+        
+        settings_text = f"""🔧 **Bot Settings**
+
+**Current Configuration:**
+📤 Upload Mode: {upload_mode_text}
+{destination_text}
+
+Choose an option to modify:"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "📤 Send As Document" if not upload_as_document else "📤 Send As Media", 
+                    callback_data="settings_toggle_upload_mode"
+                ),
+                InlineKeyboardButton("📍 Set Upload Destination", callback_data="settings_set_destination")
+            ],
+            [
+                InlineKeyboardButton("🔙 Back to Menu", callback_data="home")
+            ]
+        ])
+        
+        await callback_query.message.edit_text(settings_text, reply_markup=keyboard)
+        
+    except Exception as e:
+        await callback_query.answer(f"❌ Error loading settings: {str(e)}")
 
 # Callback Query Handler
 @Client.on_callback_query()
@@ -100,9 +145,13 @@ async def cb_handler(client, query: CallbackQuery):
                 [InlineKeyboardButton("• sᴇǫᴜᴇɴᴄᴇ ғɪʟᴇs •", callback_data='sequence_help')],
                 [InlineKeyboardButton('• ᴛʜᴜᴍʙɴᴀɪʟ', callback_data='thumbnail'), InlineKeyboardButton('ᴄᴀᴘᴛɪᴏɴ •', callback_data='caption')],
                 [InlineKeyboardButton('• ᴍᴇᴛᴀᴅᴀᴛᴀ', callback_data='meta'), InlineKeyboardButton('ᴅᴏɴᴀᴛᴇ •', callback_data='donate')],
+                [InlineKeyboardButton('• sᴇᴛᴛɪɴɢs', callback_data='settings_main')],
                 [InlineKeyboardButton('• ʜᴏᴍᴇ', callback_data='home')]
             ])
         )
+
+    elif data == "settings_main":
+        await settings_callback(client, query)
 
     elif data == "sequence_help":
         await query.message.edit_text(
@@ -134,7 +183,7 @@ async def cb_handler(client, query: CallbackQuery):
             text=Txt.FILE_NAME_TXT.format(format_template=format_template),
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ᴄʟᴏsᴇ", callback_data="close"), InlineKeyboardButton("ʙᴀᴄᴋ •", callback_data="help")]
+                [InlineKeyboardButton("• sᴜᴘᴘᴏʀᴛ", url='https://t.me/weebs_talk_station'), InlineKeyboardButton("ʙᴀᴄᴋ •", callback_data="help")]
             ])
         )
     elif data == "thumbnail":
@@ -142,39 +191,7 @@ async def cb_handler(client, query: CallbackQuery):
             text=Txt.THUMBNAIL_TXT,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ᴄʟᴏsᴇ", callback_data="close"), InlineKeyboardButton("ʙᴀᴄᴋ •", callback_data="help")]
-            ])
-        )
-    elif data == "metadatax":
-        await query.message.edit_text(
-            text=Txt.SEND_METADATA,
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ᴄʟᴏsᴇ", callback_data="close"), InlineKeyboardButton("ʙᴀᴄᴋ •", callback_data="help")]
-            ])
-        )
-    elif data == "source":
-        await query.message.edit_text(
-            text=Txt.SOURCE_TXT,
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ᴄʟᴏsᴇ", callback_data="close"), InlineKeyboardButton("ʙᴀᴄᴋ •", callback_data="home")]
-            ])
-        )
-    elif data == "premiumx":
-        await query.message.edit_text(
-            text=Txt.PREMIUM_TXT,
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ʙᴀᴄᴋ", callback_data="help"), InlineKeyboardButton("ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ •", url='https://t.me/IntrovertSama')]
-            ])
-        )
-    elif data == "plans":
-        await query.message.edit_text(
-            text=Txt.PREPLANS_TXT,
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ᴄʟᴏsᴇ", callback_data="close"), InlineKeyboardButton("ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ •", url='https://t.me/IntrovertSama')]
+                [InlineKeyboardButton("• sᴜᴘᴘᴏʀᴛ", url='https://t.me/weebs_talk_station'), InlineKeyboardButton("ʙᴀᴄᴋ •", callback_data="help")]
             ])
         )
     elif data == "about":
@@ -182,61 +199,28 @@ async def cb_handler(client, query: CallbackQuery):
             text=Txt.ABOUT_TXT,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• sᴜᴘᴘᴏʀᴛ", url='https://t.me/weebs_talk_station'), InlineKeyboardButton("ᴄᴏᴍᴍᴀɴᴅs •", callback_data="help")],
-                [InlineKeyboardButton("• ᴅᴇᴠᴇʟᴏᴘᴇʀ", url='https://t.me/IntrovertSama'), InlineKeyboardButton("ɴᴇᴛᴡᴏʀᴋ •", url='https://t.me/+ecWFJBaAGZpjMGY1')],
-                [InlineKeyboardButton("• ʙᴀᴄᴋ •", callback_data="home")]
+                [InlineKeyboardButton("• sᴜᴘᴘᴏʀᴛ", url='https://t.me/weebs_talk_station'), InlineKeyboardButton("ʙᴀᴄᴋ •", callback_data="home")]
+            ])
+        )
+    elif data == "premiumx":
+        await query.message.edit_text(
+            text=Txt.PREMIUM_TXT,
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("• ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ", callback_data="plans"), InlineKeyboardButton("ʙᴀᴄᴋ •", callback_data="home")]
+            ])
+        )
+    elif data == "plans":
+        await query.message.edit_text(
+            text=Txt.PLANS_TXT,
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("• ʙᴀᴄᴋ", callback_data="premiumx"), InlineKeyboardButton("ᴏᴡɴᴇʀ •", url='https://t.me/IntrovertSama')]
             ])
         )
     elif data == "close":
+        await query.message.delete()
         try:
-            await query.message.delete()
             await query.message.reply_to_message.delete()
-            await query.message.continue_propagation()
         except:
-            await query.message.delete()
-            await query.message.continue_propagation()
-
-# Donation Command Handler
-@Client.on_message(filters.command("donate"))
-async def donation(client, message):
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton(text="ʙᴀᴄᴋ", callback_data="help"), InlineKeyboardButton(text="ᴏᴡɴᴇʀ", url='https://t.me/IntrovertSama')]
-    ])
-    yt = await message.reply_photo(photo='https://graph.org/file/1919fe077848bd0783d4c.jpg', caption=Txt.DONATE_TXT, reply_markup=buttons)
-    await asyncio.sleep(300)
-    await yt.delete()
-    await message.delete()
-
-# Premium Command Handler
-@Client.on_message(filters.command("premium"))
-async def getpremium(bot, message):
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("ᴏᴡɴᴇʀ", url="https://t.me/IntrovertSama"), InlineKeyboardButton("ᴄʟᴏsᴇ", callback_data="close")]
-    ])
-    await message.reply_text(
-        text=Txt.PREMIUM_TXT,
-        disable_web_page_preview=True,
-        reply_markup=buttons
-    )
-
-@Client.on_message(filters.command("plan"))
-async def premium(bot, message):
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("sᴇɴᴅ ss", url="https://t.me/IntrovertSama"), InlineKeyboardButton("ᴄʟᴏsᴇ", callback_data="close")]
-    ])
-    await message.reply_text(
-        text=Txt.PREPLANS_TXT,
-        disable_web_page_preview=True,
-        reply_markup=buttons
-    )
-
-@Client.on_message(filters.command("bought"))
-async def bought(bot, message):
-    if message.reply_to_message and message.reply_to_message.photo:
-        await message.reply_text(
-            "**Tʜᴀɴᴋ ʏᴏᴜ ꜰᴏʀ ᴘᴜʀᴄʜᴀꜱɪɴɢ ᴘʀᴇᴍɪᴜᴍ. ᴡᴇ ᴡɪʟʟ ᴠᴇʀɪꜰʏ ʏᴏᴜʀ ᴘᴀʏᴍᴇɴᴛ ᴀɴᴅ ᴀᴄᴛɪᴠᴀᴛᴇ ʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ꜱᴏᴏɴ**"
-        )
-    else:
-        await message.reply_text(
-            "**ᴘʟᴇᴀꜱᴇ ꜱᴇɴᴅ ᴛʜᴇ ᴘᴀʏᴍᴇɴᴛ ꜱᴄʀᴇᴇɴꜱʜᴏᴛ ᴀɴᴅ ʀᴇᴘʟʏ ᴡɪᴛʜ /bought**"
-        )
+            pass
