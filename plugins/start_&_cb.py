@@ -1,12 +1,163 @@
 import random
 import asyncio
+import re
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from pyrogram.errors import ChatAdminRequired, UserNotParticipant, PeerIdInvalid
 
 from helper.database import codeflixbots
 from config import *
 from config import Config
 from config import Txt
+
+# Store temporary states for users waiting for destination input
+waiting_for_destination = {}
+
+# Settings Command Handler
+@Client.on_message(filters.private & filters.command("settings"))
+async def settings_command(client, message):
+    """Main settings command handler"""
+    user_id = message.from_user.id
+    
+    try:
+        # Get current user settings with proper error handling
+        try:
+            upload_as_document = await codeflixbots.get_upload_mode(user_id)
+        except:
+            upload_as_document = False
+            
+        try:
+            destination_info = await codeflixbots.get_upload_destination(user_id)
+        except:
+            destination_info = None
+        
+        # Format upload mode text
+        upload_mode_text = "Send As Document ✅" if upload_as_document else "Send As Media ✅"
+        
+        # Format destination text
+        if destination_info and destination_info.get('chat_id'):
+            dest_name = destination_info.get('name', 'Unknown Channel/Group')
+            destination_text = f"📍 Destination: {dest_name}"
+        else:
+            destination_text = "📍 Destination: Private Chat (Default)"
+        
+        settings_text = f"""🔧 **Bot Settings**
+
+**Current Configuration:**
+📤 Upload Mode: {upload_mode_text}
+{destination_text}
+
+Choose an option to modify:"""
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "📤 Send As Document" if not upload_as_document else "📤 Send As Media", 
+                    callback_data="settings_toggle_upload_mode"
+                ),
+                InlineKeyboardButton("📍 Set Upload Destination", callback_data="settings_set_destination")
+            ],
+            [
+                InlineKeyboardButton("🔙 Back to Menu", callback_data="home")
+            ]
+        ])
+        
+        # Send with image
+        settings_image = "https://graph.org/file/255a7bf3992c1bfb4b78a-03d5d005ec6812a81d.jpg"
+        
+        await message.reply_photo(
+            photo=settings_image,
+            caption=settings_text,
+            reply_markup=keyboard
+        )
+        
+    except Exception as e:
+        await message.reply_text(f"❌ Error loading settings: {str(e)}")
+
+# Handle destination ID input from user
+@Client.on_message(filters.private & filters.text & ~filters.command(['start', 'settings', 'help', 'autorename', 'setmedia', 'metadata', 'queue', 'clearqueue', 'queueinfo', 'startsequence', 'endsequence', 'showsequence', 'cancelsequence', 'leaderboard', 'settitle', 'setauthor', 'setartist', 'setaudio', 'setsubtitle', 'setvideo', 'set_caption', 'del_caption', 'see_caption', 'view_caption', 'view_thumb', 'viewthumb', 'del_thumb', 'delthumb', 'tutorial', 'restart', 'stats', 'status', 'broadcast']))
+async def handle_destination_input(client, message):
+    """Handle destination ID input from user"""
+    user_id = message.from_user.id
+    
+    # Check if user is waiting for destination input
+    if user_id not in waiting_for_destination:
+        return
+    
+    try:
+        chat_id_text = message.text.strip()
+        
+        # Validate chat ID format
+        if not validate_chat_id(chat_id_text):
+            await message.reply_text(
+                "❌ Invalid chat ID format!\n\n"
+                "Please send a valid chat ID starting with -100\n"
+                "Example: -100xxxxxxxxx or -100xxx:topic_id"
+            )
+            return
+        
+        # Parse chat ID and topic ID
+        chat_id, topic_id = parse_chat_id(chat_id_text)
+        
+        # Try to get chat info
+        chat_info = await client.get_chat(chat_id)
+        
+        # Check if bot is admin in the chat
+        try:
+            bot_member = await client.get_chat_member(chat_id, (await client.get_me()).id)
+            if bot_member.status not in ["administrator", "creator"]:
+                await message.reply_text(
+                    "❌ Bot is not an admin in this chat!\n\n"
+                    "Please make sure the bot is added as admin with required permissions."
+                )
+                return
+        except Exception:
+            await message.reply_text(
+                "❌ Bot is not a member of this chat!\n\n"
+                "Please add the bot to the channel/group first."
+            )
+            return
+        
+        # Save destination info
+        destination_data = {
+            'chat_id': chat_id,
+            'topic_id': topic_id,
+            'name': chat_info.title,
+            'type': chat_info.type.value
+        }
+        
+        await codeflixbots.set_upload_destination(user_id, destination_data)
+        
+        # Clear waiting state
+        waiting_for_destination[user_id]['timeout_task'].cancel()
+        del waiting_for_destination[user_id]
+        
+        # Success message
+        success_text = f"✅ **Destination Set Successfully!**\n\n"
+        success_text += f"📍 **Chat:** {chat_info.title}\n"
+        success_text += f"🔢 **ID:** `{chat_id_text}`\n"
+        if topic_id:
+            success_text += f"📋 **Topic ID:** `{topic_id}`\n"
+        success_text += f"📱 **Type:** {chat_info.type.value.title()}\n\n"
+        success_text += "All future uploads will be sent to this destination."
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔧 Back to Settings", callback_data="settings_back_to_settings")]
+        ])
+        
+        await message.reply_text(success_text, reply_markup=keyboard)
+        
+    except PeerIdInvalid:
+        await message.reply_text(
+            "❌ Invalid chat ID!\n\n"
+            "Please check the chat ID and make sure it's correct."
+        )
+    except Exception as e:
+        await message.reply_text(
+            f"❌ Error setting destination!\n\n"
+            f"Error: {str(e)}\n\n"
+            "Please try again or contact support."
+        )
 
 # Start Command Handler
 @Client.on_message(filters.private & filters.command("start"))
@@ -44,7 +195,6 @@ async def start(client, message: Message):
         ],
         [
             InlineKeyboardButton('• ᴀʙᴏᴜᴛ', callback_data='about')
-            #InlineKeyboardButton('sᴏᴜʀᴄᴇ •', callback_data='source')
         ]
     ])
 
@@ -61,20 +211,6 @@ async def start(client, message: Message):
             reply_markup=buttons,
             disable_web_page_preview=True
         )
-
-# Settings Command Handler
-@Client.on_message(filters.private & filters.command("settings"))
-async def settings_command(client, message):
-    # Just call the settings callback helper with a dummy callback_query-like object
-    class DummyCallback:
-        def __init__(self, message, from_user):
-            self.message = message
-            self.from_user = from_user
-            self.id = from_user.id
-        async def answer(self, text):  # dummy answer method
-            await message.reply_text(text)
-    dummy_callback = DummyCallback(message, message.from_user)
-    await settings_callback(client, dummy_callback)
 
 # Settings callback helper function
 async def settings_callback(client, callback_query: CallbackQuery):
@@ -129,10 +265,8 @@ Choose an option to modify:"""
         
         # Check if we can edit with media or need to send new message
         try:
-            # edit_media expects an InputMediaPhoto or similar, so importing InputMediaPhoto
-            from pyrogram.types import InputMediaPhoto
             await callback_query.message.edit_media(
-                media=InputMediaPhoto(settings_image),
+                media=settings_image,
                 caption=settings_text,
                 reply_markup=keyboard
             )
@@ -228,9 +362,8 @@ Example: -100xxx:topic_id
                 settings_image = "https://graph.org/file/255a7bf3992c1bfb4b78a-03d5d005ec6812a81d.jpg"
                 
                 try:
-                    from pyrogram.types import InputMediaPhoto
                     await query.message.edit_media(
-                        media=InputMediaPhoto(settings_image),
+                        media=settings_image,
                         caption=destination_text,
                         reply_markup=keyboard
                     )
@@ -246,12 +379,23 @@ Example: -100xxx:topic_id
                             reply_markup=keyboard
                         )
                 
+                # Set user in waiting state
+                waiting_for_destination[user_id] = {
+                    'message_id': query.message.id,
+                    'timeout_task': asyncio.create_task(destination_timeout(client, user_id, query.message))
+                }
+                
                 await query.answer("📍 Follow the steps to set destination")
                 
             except Exception as e:
                 await query.answer(f"❌ Error: {str(e)}")
                 
         elif data == "settings_cancel_destination":
+            # Clear waiting state
+            if user_id in waiting_for_destination:
+                waiting_for_destination[user_id]['timeout_task'].cancel()
+                del waiting_for_destination[user_id]
+            
             await settings_callback(client, query)
             await query.answer("❌ Destination setup cancelled")
             
@@ -319,7 +463,7 @@ Example: -100xxx:topic_id
             text=Txt.DONATE_TXT,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ʙᴀᴄᴋ", callback_data="help"), InlineKeyboardButton("ᴏᴡɴᴇʀ •", callback_data='https://t.me/IntrovertSama')]
+                [InlineKeyboardButton("• ʙᴀᴄᴋ", callback_data="help"), InlineKeyboardButton("ᴏᴡɴᴇʀ •", url='https://t.me/IntrovertSama')]
             ])
         )
     elif data == "file_names":
@@ -369,3 +513,43 @@ Example: -100xxx:topic_id
             await query.message.reply_to_message.delete()
         except:
             pass
+
+# Helper functions
+async def destination_timeout(client, user_id, message):
+    """Handle timeout for destination input"""
+    try:
+        await asyncio.sleep(60)  # 60 seconds timeout
+        
+        if user_id in waiting_for_destination:
+            del waiting_for_destination[user_id]
+            
+            timeout_text = """⏰ **Timeout!**
+
+Destination setup has timed out. Please try again.
+
+/settings - Return to settings"""
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔧 Back to Settings", callback_data="settings_back_to_settings")]
+            ])
+            
+            await message.edit_text(timeout_text, reply_markup=keyboard)
+            
+    except asyncio.CancelledError:
+        pass  # Timeout was cancelled, which is normal
+    except Exception as e:
+        print(f"Error in destination timeout: {e}")
+
+def validate_chat_id(chat_id_text):
+    """Validate chat ID format"""
+    # Pattern for chat ID with optional topic ID
+    pattern = r'^-100\d{10,13}(?::\d+)?$'
+    return re.match(pattern, chat_id_text) is not None
+
+def parse_chat_id(chat_id_text):
+    """Parse chat ID and topic ID from input"""
+    if ':' in chat_id_text:
+        chat_id, topic_id = chat_id_text.split(':', 1)
+        return int(chat_id), int(topic_id)
+    else:
+        return int(chat_id_text), None
