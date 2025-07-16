@@ -68,9 +68,16 @@ async def settings_callback(client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
     
     try:
-        # Get current user settings
-        upload_as_document = await codeflixbots.get_upload_mode(user_id)
-        destination_info = await codeflixbots.get_upload_destination(user_id)
+        # Get current user settings with proper error handling
+        try:
+            upload_as_document = await codeflixbots.get_upload_mode(user_id)
+        except:
+            upload_as_document = False
+            
+        try:
+            destination_info = await codeflixbots.get_upload_destination(user_id)
+        except:
+            destination_info = None
         
         # Format upload mode text
         upload_mode_text = "Send As Document ✅" if upload_as_document else "Send As Media ✅"
@@ -116,6 +123,87 @@ async def cb_handler(client, query: CallbackQuery):
 
     print(f"Callback data received: {data}")  # Debugging line
 
+    # Handle settings-related callbacks first
+    if data.startswith("settings_"):
+        if data == "settings_toggle_upload_mode":
+            try:
+                # Get current mode and toggle it
+                try:
+                    current_mode = await codeflixbots.get_upload_mode(user_id)
+                except:
+                    current_mode = False
+                    
+                new_mode = not current_mode
+                
+                # Update in database
+                try:
+                    await codeflixbots.set_upload_mode(user_id, new_mode)
+                except Exception as e:
+                    await query.answer(f"❌ Database error: {str(e)}")
+                    return
+                
+                # Update the settings display
+                await settings_callback(client, query)
+                
+                # Show confirmation
+                mode_text = "Document" if new_mode else "Media"
+                await query.answer(f"✅ Upload mode changed to: {mode_text}")
+                
+            except Exception as e:
+                await query.answer(f"❌ Error: {str(e)}")
+                
+        elif data == "settings_set_destination":
+            try:
+                bot_username = (await client.get_me()).username
+                
+                destination_text = f"""📍 **Set Upload Destination**
+
+If you add bot to a channel/group, files will be uploaded there instead of private chat.
+
+**Steps To Add:**
+1. First create a new channel or group if you don't have one
+2. Click button below to add bot to your channel/group (as Admin with permissions)
+3. Send /id command in your channel/group
+4. You'll get a chat_id starting with -100
+5. Copy and send it here
+
+**For Group Topics:**
+Example: -100xxx:topic_id
+
+⏱️ Send Upload Destination ID. Timeout: 60 sec"""
+
+                keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "🏢 Add To Channel", 
+                            url=f"http://t.me/{bot_username}?startchannel&admin=post_messages+edit_messages+delete_messages"
+                        ),
+                        InlineKeyboardButton(
+                            "👥 Add To Group", 
+                            url=f"http://t.me/{bot_username}?startgroup&admin=post_messages+edit_messages+delete_messages"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton("❌ Cancel", callback_data="settings_cancel_destination")
+                    ]
+                ])
+                
+                await query.message.edit_text(destination_text, reply_markup=keyboard)
+                await query.answer("📍 Follow the steps to set destination")
+                
+            except Exception as e:
+                await query.answer(f"❌ Error: {str(e)}")
+                
+        elif data == "settings_cancel_destination":
+            await settings_callback(client, query)
+            await query.answer("❌ Destination setup cancelled")
+            
+        elif data == "settings_back_to_settings":
+            await settings_callback(client, query)
+            
+        return  # Exit early for settings callbacks
+
+    # Handle regular callbacks
     if data == "home":
         await query.message.edit_text(
             text=Txt.START_TXT.format(query.from_user.mention),
