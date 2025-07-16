@@ -75,7 +75,12 @@ Choose an option to modify:"""
         await message.reply_text(f"❌ Error loading settings: {str(e)}")
 
 # Handle destination ID input from user
-@Client.on_message(filters.private & filters.text & ~filters.command(['start', 'settings', 'help', 'autorename', 'setmedia', 'metadata', 'queue', 'clearqueue', 'queueinfo', 'startsequence', 'endsequence', 'showsequence', 'cancelsequence', 'leaderboard', 'settitle', 'setauthor', 'setartist', 'setaudio', 'setsubtitle', 'setvideo', 'set_caption', 'del_caption', 'see_caption', 'view_caption', 'view_thumb', 'viewthumb', 'del_thumb', 'delthumb', 'tutorial', 'restart', 'stats', 'status', 'broadcast']))
+@Client.on_message(filters.private & filters.text & ~filters.command([
+    'start', 'settings', 'help', 'autorename', 'setmedia', 'metadata', 'queue', 'clearqueue', 
+    'queueinfo', 'startsequence', 'endsequence', 'showsequence', 'cancelsequence', 'leaderboard', 
+    'settitle', 'setauthor', 'setartist', 'setaudio', 'setsubtitle', 'setvideo', 'set_caption', 
+    'del_caption', 'see_caption', 'view_caption', 'view_thumb', 'viewthumb', 'del_thumb', 'delthumb', 
+    'tutorial', 'restart', 'stats', 'status', 'broadcast']))
 async def handle_destination_input(client, message):
     """Handle destination ID input from user"""
     user_id = message.from_user.id
@@ -100,23 +105,102 @@ async def handle_destination_input(client, message):
         chat_id, topic_id = parse_chat_id(chat_id_text)
         
         # Try to get chat info
-        chat_info = await client.get_chat(chat_id)
-        
-        # Check if bot is admin in the chat
         try:
-            bot_member = await client.get_chat_member(chat_id, (await client.get_me()).id)
-            if bot_member.status not in ["administrator", "creator"]:
-                await message.reply_text(
-                    "❌ Bot is not an admin in this chat!\n\n"
-                    "Please make sure the bot is added as admin with required permissions."
-                )
-                return
-        except Exception:
+            chat_info = await client.get_chat(chat_id)
+        except Exception as e:
             await message.reply_text(
-                "❌ Bot is not a member of this chat!\n\n"
-                "Please add the bot to the channel/group first."
+                f"❌ Cannot access this chat!\n\n"
+                f"Error: {str(e)}\n\n"
+                "Please make sure:\n"
+                "1. The chat ID is correct\n"
+                "2. The bot is added to the chat\n"
+                "3. The bot has proper permissions"
             )
             return
+        
+        # Get bot info
+        bot_info = await client.get_me()
+        
+        # Check if bot is in the chat and has permissions
+        try:
+            bot_member = await client.get_chat_member(chat_id, bot_info.id)
+            
+            # Check bot status
+            if bot_member.status == "kicked":
+                await message.reply_text(
+                    "❌ Bot is banned from this chat!\n\n"
+                    "Please unban the bot and add it back as admin."
+                )
+                return
+            elif bot_member.status == "left":
+                await message.reply_text(
+                    "❌ Bot is not in this chat!\n\n"
+                    "Please add the bot to the channel/group first."
+                )
+                return
+            elif bot_member.status in ["member"]:
+                await message.reply_text(
+                    "❌ Bot is only a member, not an admin!\n\n"
+                    "Please promote the bot to admin with these permissions:\n"
+                    "• Post Messages\n"
+                    "• Edit Messages\n"
+                    "• Delete Messages"
+                )
+                return
+            elif bot_member.status in ["administrator", "creator"]:
+                # Check specific permissions for administrators
+                if bot_member.status == "administrator":
+                    permissions = bot_member.privileges
+                    if permissions:
+                        if not permissions.can_post_messages:
+                            await message.reply_text(
+                                "❌ Bot doesn't have 'Post Messages' permission!\n\n"
+                                "Please give the bot permission to post messages."
+                            )
+                            return
+                        if not permissions.can_edit_messages:
+                            await message.reply_text(
+                                "❌ Bot doesn't have 'Edit Messages' permission!\n\n"
+                                "Please give the bot permission to edit messages."
+                            )
+                            return
+                        if not permissions.can_delete_messages:
+                            await message.reply_text(
+                                "❌ Bot doesn't have 'Delete Messages' permission!\n\n"
+                                "Please give the bot permission to delete messages."
+                            )
+                            return
+                
+                # Bot has proper admin permissions
+                pass
+            else:
+                await message.reply_text(
+                    f"❌ Unknown bot status: {bot_member.status}\n\n"
+                    "Please make sure the bot is an admin with proper permissions."
+                )
+                return
+                
+        except Exception as e:
+            # If we can't get member info, try a different approach
+            try:
+                # Try to send a test message to verify permissions
+                test_msg = await client.send_message(
+                    chat_id, 
+                    "🤖 **Bot Permission Test**\n\nThis message confirms the bot has proper permissions in this chat.",
+                    message_thread_id=topic_id
+                )
+                # Delete the test message
+                await test_msg.delete()
+            except Exception as test_error:
+                await message.reply_text(
+                    f"❌ Bot cannot send messages to this chat!\n\n"
+                    f"Error: {str(test_error)}\n\n"
+                    "Please make sure:\n"
+                    "1. Bot is added to the chat\n"
+                    "2. Bot is admin with 'Post Messages' permission\n"
+                    "3. Chat allows bots to send messages"
+                )
+                return
         
         # Save destination info
         destination_data = {
@@ -138,7 +222,9 @@ async def handle_destination_input(client, message):
         success_text += f"🔢 **ID:** `{chat_id_text}`\n"
         if topic_id:
             success_text += f"📋 **Topic ID:** `{topic_id}`\n"
-        success_text += f"📱 **Type:** {chat_info.type.value.title()}\n\n"
+        success_text += f"📱 **Type:** {chat_info.type.value.title()}\n"
+        success_text += f"👤 **Bot Status:** {bot_member.status.title()}\n\n"
+        success_text += "✅ All permissions verified!\n"
         success_text += "All future uploads will be sent to this destination."
         
         keyboard = InlineKeyboardMarkup([
@@ -265,8 +351,11 @@ Choose an option to modify:"""
         
         # Check if we can edit with media or need to send new message
         try:
+            # pyrogram expects InputMediaPhoto for edit_media, create accordingly
+            from pyrogram.types import InputMediaPhoto
+            media = InputMediaPhoto(settings_image)
             await callback_query.message.edit_media(
-                media=settings_image,
+                media=media,
                 caption=settings_text,
                 reply_markup=keyboard
             )
@@ -362,8 +451,11 @@ Example: -100xxx:topic_id
                 settings_image = "https://graph.org/file/255a7bf3992c1bfb4b78a-03d5d005ec6812a81d.jpg"
                 
                 try:
+                    # Use InputMediaPhoto here as well
+                    from pyrogram.types import InputMediaPhoto
+                    media = InputMediaPhoto(settings_image)
                     await query.message.edit_media(
-                        media=settings_image,
+                        media=media,
                         caption=destination_text,
                         reply_markup=keyboard
                     )
@@ -542,14 +634,14 @@ Destination setup has timed out. Please try again.
 
 def validate_chat_id(chat_id_text):
     """Validate chat ID format"""
-    # Pattern for chat ID with optional topic ID
+    # Pattern for chat ID with optional topic ID (after colon)
     pattern = r'^-100\d{10,13}(?::\d+)?$'
     return re.match(pattern, chat_id_text) is not None
 
 def parse_chat_id(chat_id_text):
     """Parse chat ID and topic ID from input"""
     if ':' in chat_id_text:
-        chat_id, topic_id = chat_id_text.split(':', 1)
-        return int(chat_id), int(topic_id)
+        chat_id_str, topic_id_str = chat_id_text.split(':', 1)
+        return int(chat_id_str), int(topic_id_str)
     else:
         return int(chat_id_text), None
