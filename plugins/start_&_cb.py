@@ -110,7 +110,27 @@ Choose an option to modify:"""
             ]
         ])
         
-        await callback_query.message.edit_text(settings_text, reply_markup=keyboard)
+        # Send with image
+        settings_image = "https://graph.org/file/255a7bf3992c1bfb4b78a-03d5d005ec6812a81d.jpg"
+        
+        # Check if we can edit with media or need to send new message
+        try:
+            await callback_query.message.edit_media(
+                media=settings_image,
+                caption=settings_text,
+                reply_markup=keyboard
+            )
+        except:
+            # If editing media fails, delete old message and send new one
+            try:
+                await callback_query.message.delete()
+            except:
+                pass
+            await callback_query.message.reply_photo(
+                photo=settings_image,
+                caption=settings_text,
+                reply_markup=keyboard
+            )
         
     except Exception as e:
         await callback_query.answer(f"❌ Error loading settings: {str(e)}")
@@ -188,7 +208,27 @@ Example: -100xxx:topic_id
                     ]
                 ])
                 
-                await query.message.edit_text(destination_text, reply_markup=keyboard)
+                # Use same settings image for destination page
+                settings_image = "https://graph.org/file/255a7bf3992c1bfb4b78a-03d5d005ec6812a81d.jpg"
+                
+                try:
+                    await query.message.edit_media(
+                        media=settings_image,
+                        caption=destination_text,
+                        reply_markup=keyboard
+                    )
+                except:
+                    try:
+                        await query.message.edit_caption(
+                            caption=destination_text,
+                            reply_markup=keyboard
+                        )
+                    except:
+                        await query.message.edit_text(
+                            text=destination_text,
+                            reply_markup=keyboard
+                        )
+                
                 await query.answer("📍 Follow the steps to set destination")
                 
             except Exception as e:
@@ -262,7 +302,7 @@ Example: -100xxx:topic_id
             text=Txt.DONATE_TXT,
             disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("• ʙᴀᴄᴋ", callback_data="help"), InlineKeyboardButton("ᴏᴡɴᴇʀ •", url='https://t.me/IntrovertSama')]
+                [InlineKeyboardButton("• ʙᴀᴄᴋ", callback_data="help"), InlineKeyboardButton("ᴏᴡɴᴇʀ •", callback_data='https://t.me/IntrovertSama')]
             ])
         )
     elif data == "file_names":
