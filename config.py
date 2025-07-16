@@ -151,9 +151,47 @@ Pʀɪᴄɪɴɢ:
 
 ➲ /Autorename: ᴀᴜᴛᴏ ʀᴇɴᴀᴍᴇ ʏᴏᴜʀ ꜰɪʟᴇꜱ.
 ➲ /Metadata: ᴄᴏᴍᴍᴀɴᴅꜱ ᴛᴏ ᴛᴜʀɴ ᴏɴ ᴏғғ ᴍᴇᴛᴀᴅᴀᴛᴀ.
-➲ /Queue: ᴄʜᴇᴄᴋ ʏᴏᴜʀ ғɪʟᴇ ᴘʀᴏᴄᴇssɪɴɢ qᴜᴇᴜᴇ.
-➲ /Clearqueue: ᴄʟᴇᴀʀ ᴘᴇɴᴅɪɴɢ ғɪʟᴇs ғʀᴏᴍ qᴜᴇᴜᴇ.
+➲ /Queue: ᴄʜᴇᴄᴋ ʏᴏᴜʀ ꜰɪʟᴇ ᴘʀᴏᴄᴇssɪɴɢ qᴜᴇᴜᴇ.
+➲ /Clearqueue: ᴄʟᴇᴀʀ ᴘᴇɴᴅɪɴɢ ꜰɪʟᴇs ꜰʀᴏᴍ qᴜᴇᴜᴇ.
 ➲ /Help: ɢᴇᴛ ǫᴜɪᴄᴋ ᴀꜱꜱɪꜱᴛᴀɴᴄᴇ.</b>"""
+
+    # Added metadata and plans text as requested
+    SEND_METADATA = """<b><u>» ᴛᴏ sᴇᴛ ᴍᴇᴛᴀᴅᴀᴛᴀ</u></b>
+
+Use /metadata command to enable/disable and set metadata values.
+
+Available metadata commands:
+➲ /settitle - Set custom title
+➲ /setauthor - Set author name  
+➲ /setartist - Set artist name
+➲ /setaudio - Set audio title
+➲ /setsubtitle - Set subtitle name
+➲ /setvideo - Set video title
+
+After setting metadata values, use /metadata to enable/disable metadata."""
+
+    PLANS_TXT = """<b>💎 **Premium Plans** 💎</b>
+
+**Choose your perfect plan:**
+
+**🌟 Basic Plan - ₹99/month**
+• Unlimited file renaming
+• Priority processing
+• No ads
+
+**⭐ Pro Plan - ₹199/month**  
+• All Basic features
+• Advanced metadata editing
+• Custom upload destinations
+• Priority support
+
+**💫 Premium Plan - ₹299/month**
+• All Pro features
+• Bulk operations
+• API access
+• Dedicated support
+
+Contact @IntrovertSama to purchase."""
 
     SEND_METADATA = """
 <b>--Metadata Settings:--</b>
