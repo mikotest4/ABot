@@ -25,6 +25,8 @@ class Database:
             metadata=True,
             metadata_code="Telegram : @Codeflix_Bots",
             format_template=None,
+            upload_as_document=False,  # New field for upload mode
+            upload_destination=None,   # New field for upload destination
             ban_status=dict(
                 is_banned=False,
                 ban_duration=0,
@@ -163,24 +165,158 @@ class Database:
 
     async def get_audio(self, user_id):
         user = await self.col.find_one({'_id': int(user_id)})
-        return user.get('audio', 'By @Animes_Cruise')
+        return user.get('audio', '@Animes_Cruise')
 
     async def set_audio(self, user_id, audio):
         await self.col.update_one({'_id': int(user_id)}, {'$set': {'audio': audio}})
 
     async def get_subtitle(self, user_id):
         user = await self.col.find_one({'_id': int(user_id)})
-        return user.get('subtitle', "By @Animes_Cruise")
+        return user.get('subtitle', '@Animes_Cruise')
 
     async def set_subtitle(self, user_id, subtitle):
         await self.col.update_one({'_id': int(user_id)}, {'$set': {'subtitle': subtitle}})
 
     async def get_video(self, user_id):
         user = await self.col.find_one({'_id': int(user_id)})
-        return user.get('video', 'Encoded By @Animes_Cruise')
+        return user.get('video', '@Animes_Cruise')
 
     async def set_video(self, user_id, video):
         await self.col.update_one({'_id': int(user_id)}, {'$set': {'video': video}})
 
+    # New methods for settings functionality
 
+    async def get_upload_mode(self, user_id):
+        """Get user's upload mode preference (True = document, False = media)"""
+        try:
+            user = await self.col.find_one({"_id": int(user_id)})
+            return user.get("upload_as_document", False) if user else False
+        except Exception as e:
+            logging.error(f"Error getting upload mode for user {user_id}: {e}")
+            return False
+
+    async def set_upload_mode(self, user_id, upload_as_document):
+        """Set user's upload mode preference"""
+        try:
+            await self.col.update_one(
+                {"_id": int(user_id)}, 
+                {"$set": {"upload_as_document": upload_as_document}}
+            )
+        except Exception as e:
+            logging.error(f"Error setting upload mode for user {user_id}: {e}")
+
+    async def get_upload_destination(self, user_id):
+        """Get user's upload destination info"""
+        try:
+            user = await self.col.find_one({"_id": int(user_id)})
+            return user.get("upload_destination", None) if user else None
+        except Exception as e:
+            logging.error(f"Error getting upload destination for user {user_id}: {e}")
+            return None
+
+    async def set_upload_destination(self, user_id, destination_data):
+        """Set user's upload destination"""
+        try:
+            await self.col.update_one(
+                {"_id": int(user_id)}, 
+                {"$set": {"upload_destination": destination_data}}
+            )
+        except Exception as e:
+            logging.error(f"Error setting upload destination for user {user_id}: {e}")
+
+    async def remove_upload_destination(self, user_id):
+        """Remove user's upload destination (reset to private chat)"""
+        try:
+            await self.col.update_one(
+                {"_id": int(user_id)}, 
+                {"$set": {"upload_destination": None}}
+            )
+        except Exception as e:
+            logging.error(f"Error removing upload destination for user {user_id}: {e}")
+
+    # Ban status methods
+    async def is_banned(self, id):
+        try:
+            user = await self.col.find_one({"_id": int(id)})
+            if user:
+                ban_status = user.get("ban_status", {})
+                return ban_status.get("is_banned", False)
+            return False
+        except Exception as e:
+            logging.error(f"Error checking ban status for user {id}: {e}")
+            return False
+
+    async def ban_user(self, user_id, ban_duration, ban_reason):
+        try:
+            ban_time = datetime.datetime.now()
+            ban_status = dict(
+                is_banned=True,
+                ban_duration=ban_duration,
+                banned_on=ban_time.isoformat(),
+                ban_reason=ban_reason
+            )
+            await self.col.update_one(
+                {"_id": int(user_id)}, 
+                {"$set": {"ban_status": ban_status}}
+            )
+        except Exception as e:
+            logging.error(f"Error banning user {user_id}: {e}")
+
+    async def unban_user(self, user_id):
+        try:
+            ban_status = dict(
+                is_banned=False,
+                ban_duration=0,
+                banned_on=datetime.date.max.isoformat(),
+                ban_reason=''
+            )
+            await self.col.update_one(
+                {"_id": int(user_id)}, 
+                {"$set": {"ban_status": ban_status}}
+            )
+        except Exception as e:
+            logging.error(f"Error unbanning user {user_id}: {e}")
+
+    async def get_ban_status(self, user_id):
+        try:
+            user = await self.col.find_one({"_id": int(user_id)})
+            if user:
+                return user.get("ban_status", {})
+            return {}
+        except Exception as e:
+            logging.error(f"Error getting ban status for user {user_id}: {e}")
+            return {}
+
+    # Additional utility methods
+    async def get_user_settings(self, user_id):
+        """Get all user settings in one call"""
+        try:
+            user = await self.col.find_one({"_id": int(user_id)})
+            if user:
+                return {
+                    'upload_as_document': user.get('upload_as_document', False),
+                    'upload_destination': user.get('upload_destination', None),
+                    'format_template': user.get('format_template', None),
+                    'caption': user.get('caption', None),
+                    'file_id': user.get('file_id', None),
+                    'metadata': user.get('metadata', 'Off'),
+                    'media_type': user.get('media_type', None)
+                }
+            return {}
+        except Exception as e:
+            logging.error(f"Error getting user settings for user {user_id}: {e}")
+            return {}
+
+    async def update_user_settings(self, user_id, settings_dict):
+        """Update multiple user settings at once"""
+        try:
+            await self.col.update_one(
+                {"_id": int(user_id)}, 
+                {"$set": settings_dict}
+            )
+        except Exception as e:
+            logging.error(f"Error updating user settings for user {user_id}: {e}")
+
+
+# Create the database instance
 codeflixbots = Database(Config.DB_URL, Config.DB_NAME)
