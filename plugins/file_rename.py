@@ -13,6 +13,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Queue system variables
+processing_stats = {}
+user_queues = {}
+active_tasks = {}
+MAX_CONCURRENT_PER_USER = 2
+
 # File extensions mapping for media type detection
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ts', '.mts'}
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus'}
@@ -41,6 +47,47 @@ def get_media_type(filename):
         return 'photo'
     else:
         return 'document'
+
+async def update_processing_stats(user_id, operation, status):
+    """Update processing statistics"""
+    if user_id not in processing_stats:
+        processing_stats[user_id] = {
+            'total_processed': 0,
+            'successful': 0,
+            'failed': 0,
+            'current_operation': None,
+            'last_update': time.time()
+        }
+    
+    stats = processing_stats[user_id]
+    stats['current_operation'] = operation
+    stats['last_update'] = time.time()
+    
+    if status == 'completed':
+        stats['total_processed'] += 1
+        stats['successful'] += 1
+        stats['current_operation'] = None
+    elif status == 'failed':
+        stats['total_processed'] += 1
+        stats['failed'] += 1
+        stats['current_operation'] = None
+
+async def get_user_active_tasks(user_id):
+    """Get number of active tasks for user"""
+    return len(active_tasks.get(user_id, []))
+
+async def add_active_task(user_id, task_id):
+    """Add active task for user"""
+    if user_id not in active_tasks:
+        active_tasks[user_id] = []
+    active_tasks[user_id].append(task_id)
+
+async def remove_active_task(user_id, task_id):
+    """Remove active task for user"""
+    if user_id in active_tasks and task_id in active_tasks[user_id]:
+        active_tasks[user_id].remove(task_id)
+        if not active_tasks[user_id]:
+            del active_tasks[user_id]
 
 async def send_file_to_destination(client, user_id, file_path, filename, thumbnail=None, caption=None, message=None):
     """Send file to user's configured destination"""
@@ -225,8 +272,7 @@ async def rename_start(client, message):
     
     # Check queue status
     try:
-        queue_data = await codeflixbots.get_user_queue(user_id)
-        if queue_data and len(queue_data.get('files', [])) >= 10:
+        if user_id in user_queues and len(user_queues[user_id]) >= 10:
             await message.reply_text(
                 "⚠️ Your queue is full (10 files max).\n"
                 "Please wait for current files to process or use /clearqueue"
@@ -234,6 +280,15 @@ async def rename_start(client, message):
             return
     except:
         pass
+    
+    # Check if user has reached max concurrent tasks
+    active_count = await get_user_active_tasks(user_id)
+    if active_count >= MAX_CONCURRENT_PER_USER:
+        await message.reply_text(
+            f"⚠️ You have reached the maximum concurrent processing limit ({MAX_CONCURRENT_PER_USER}).\n"
+            "Please wait for current files to complete."
+        )
+        return
     
     # Check file size (2GB limit)
     if message.document:
@@ -308,7 +363,7 @@ async def rename_doc(client, message):
         await message.reply_text("❌ Invalid filename. Please try again.")
         return
     
-    # Add to queue if enabled
+    # Check if queue is enabled
     try:
         queue_data = await codeflixbots.get_user_queue(user_id)
         if queue_data and queue_data.get('enabled', False):
@@ -323,8 +378,13 @@ async def rename_doc(client, message):
 async def process_file_rename(client, message, file_message, new_name):
     """Process file renaming and upload"""
     user_id = message.from_user.id
+    task_id = f"{user_id}_{int(time.time())}"
     
     try:
+        # Add to active tasks
+        await add_active_task(user_id, task_id)
+        await update_processing_stats(user_id, f"Processing {new_name}", "started")
+        
         # Start processing message
         ms = await message.reply_text("⏳ Processing your request...")
         
@@ -363,6 +423,7 @@ async def process_file_rename(client, message, file_message, new_name):
         except Exception as e:
             logger.error(f"Download error: {e}")
             await ms.edit_text(f"❌ Download failed: {str(e)}")
+            await update_processing_stats(user_id, f"Processing {new_name}", "failed")
             return
         
         # Rename file
@@ -376,6 +437,7 @@ async def process_file_rename(client, message, file_message, new_name):
         except Exception as e:
             logger.error(f"Rename error: {e}")
             await ms.edit_text(f"❌ Rename failed: {str(e)}")
+            await update_processing_stats(user_id, f"Processing {new_name}", "failed")
             return
         
         # Get thumbnail
@@ -426,8 +488,10 @@ async def process_file_rename(client, message, file_message, new_name):
                 success_msg += f"📁 **New name:** `{new_name}`"
             
             await ms.edit_text(success_msg)
+            await update_processing_stats(user_id, f"Processing {new_name}", "completed")
         else:
             await ms.edit_text("❌ Upload failed. Please try again.")
+            await update_processing_stats(user_id, f"Processing {new_name}", "failed")
         
         # Cleanup
         try:
@@ -444,6 +508,10 @@ async def process_file_rename(client, message, file_message, new_name):
             await ms.edit_text(f"❌ Error: {str(e)}")
         except:
             await message.reply_text(f"❌ Error: {str(e)}")
+        await update_processing_stats(user_id, f"Processing {new_name}", "failed")
+    finally:
+        # Remove from active tasks
+        await remove_active_task(user_id, task_id)
 
 async def auto_rename_file(client, message, format_template):
     """Auto rename file using template"""
@@ -534,11 +602,11 @@ async def add_to_queue(client, message, file_message, new_name):
     user_id = message.from_user.id
     
     try:
-        # Get current queue
-        queue_data = await codeflixbots.get_user_queue(user_id)
-        current_files = queue_data.get('files', []) if queue_data else []
+        # Initialize user queue if not exists
+        if user_id not in user_queues:
+            user_queues[user_id] = []
         
-        if len(current_files) >= 10:
+        if len(user_queues[user_id]) >= 10:
             await message.reply_text(
                 "⚠️ Queue is full (10 files max).\n"
                 "Please wait for current files to process."
@@ -549,16 +617,16 @@ async def add_to_queue(client, message, file_message, new_name):
         file_info = {
             'message_id': file_message.id,
             'new_name': new_name,
-            'added_time': time.time()
+            'added_time': time.time(),
+            'status': 'queued'
         }
         
-        current_files.append(file_info)
-        await codeflixbots.set_user_queue(user_id, {'files': current_files, 'enabled': True})
+        user_queues[user_id].append(file_info)
         
         await message.reply_text(
             f"✅ **File added to queue!**\n\n"
             f"📁 **Name:** `{new_name}`\n"
-            f"📊 **Queue position:** `{len(current_files)}`\n"
+            f"📊 **Queue position:** `{len(user_queues[user_id])}`\n"
             f"⏳ **Status:** Waiting\n\n"
             "Use /queueinfo to check queue status."
         )
