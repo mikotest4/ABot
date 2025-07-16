@@ -62,6 +62,20 @@ async def start(client, message: Message):
             disable_web_page_preview=True
         )
 
+# Settings Command Handler
+@Client.on_message(filters.private & filters.command("settings"))
+async def settings_command(client, message):
+    # Just call the settings callback helper with a dummy callback_query-like object
+    class DummyCallback:
+        def __init__(self, message, from_user):
+            self.message = message
+            self.from_user = from_user
+            self.id = from_user.id
+        async def answer(self, text):  # dummy answer method
+            await message.reply_text(text)
+    dummy_callback = DummyCallback(message, message.from_user)
+    await settings_callback(client, dummy_callback)
+
 # Settings callback helper function
 async def settings_callback(client, callback_query: CallbackQuery):
     """Handle settings callback from main menu"""
@@ -115,8 +129,10 @@ Choose an option to modify:"""
         
         # Check if we can edit with media or need to send new message
         try:
+            # edit_media expects an InputMediaPhoto or similar, so importing InputMediaPhoto
+            from pyrogram.types import InputMediaPhoto
             await callback_query.message.edit_media(
-                media=settings_image,
+                media=InputMediaPhoto(settings_image),
                 caption=settings_text,
                 reply_markup=keyboard
             )
@@ -212,8 +228,9 @@ Example: -100xxx:topic_id
                 settings_image = "https://graph.org/file/255a7bf3992c1bfb4b78a-03d5d005ec6812a81d.jpg"
                 
                 try:
+                    from pyrogram.types import InputMediaPhoto
                     await query.message.edit_media(
-                        media=settings_image,
+                        media=InputMediaPhoto(settings_image),
                         caption=destination_text,
                         reply_markup=keyboard
                     )
